@@ -624,6 +624,7 @@ const WEBHOOK_PORT = Number(process.env.OMB_WEBHOOK_PORT || PORT + 1);
 // Behind a proxy or tunnel, the base URL senders should use (docs/self-hosting.md).
 const WEBHOOK_PUBLIC_URL = process.env.OMB_WEBHOOK_PUBLIC_URL || undefined;
 const STATIC_DIR = process.env.OMB_STATIC_DIR || null;
+const CUBE_GATEWAY = process.env.OMB_CUBE_GATEWAY === "1";
 const MIME: Record<string, string> = {
   ".html": "text/html",
   ".js": "text/javascript",
@@ -15282,6 +15283,7 @@ function serveStatic(res: ServerResponse, path: string): boolean {
 const workspaceBackupAccess = {
   authorized: (req: IncomingMessage, original: RequestAuth) => {
     const current = resolveRequestAuth(req, {
+      cubeGateway: CUBE_GATEWAY,
       sessions, cookieName: SESSION_COOKIE, streamPath: "/api/events",
       url: new URL(req.url ?? "/", `http://localhost:${PORT}`),
       loopbackMutationToken: desktopMutationToken, companionMutationToken, loopbackTrust: LOOPBACK.trust, cliOwnerToken,
@@ -15670,6 +15672,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
       });
     }
     const gate = resolveRequestAuth(req, {
+      cubeGateway: CUBE_GATEWAY,
       sessions,
       cookieName: SESSION_COOKIE,
       streamPath: "/api/events",
@@ -19276,6 +19279,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         if (failure) return json(res, failure.status, { error: failure.error });
       }
       const current = resolveRequestAuth(req, {
+        cubeGateway: CUBE_GATEWAY,
         sessions, cookieName: SESSION_COOKIE, streamPath: "/api/events", url,
         loopbackMutationToken: desktopMutationToken, companionMutationToken,
         features: { sharedComputers: lendingEnabled() }, loopbackTrust: LOOPBACK.trust, cliOwnerToken,

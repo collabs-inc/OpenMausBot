@@ -1,0 +1,8 @@
+{
+  "name": "OpenMausBot",
+  "description": "A team of AI bots powered by your existing Claude and Codex CLI sign-ins, with persistent chats, tools, and approvals.",
+  "icon": "public/app-icon.svg",
+  "platforms": ["linux", "darwin"],
+  "install": "bash cube/install.sh",
+  "start": "bash cube/start.sh"
+}

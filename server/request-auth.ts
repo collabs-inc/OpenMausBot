@@ -402,6 +402,9 @@ export interface ResolveOptions {
   /** Path that may authenticate with a stream ticket in its query string. */
   streamPath: string;
   url: URL;
+  /** Cube's loopback gateway has already authenticated this workspace owner.
+   * Only enabled by the Cube launcher, never inferred from client headers. */
+  cubeGateway?: boolean;
   /** Packaged desktop capability, delivered over Electron's private child
    * port. When present, originless loopback callers may still read but every
    * public mutation must prove it came through the desktop's web session. */
@@ -462,6 +465,23 @@ export function resolveRequestAuth(req: IncomingMessage, options: ResolveOptions
   const method = req.method ?? "GET";
   const path = options.url.pathname;
   const deny = (status: 401 | 403, error: string): RequestAuthResult => ({ auth: null, status, error });
+
+  if (options.cubeGateway) {
+    // Cube strips untrusted forwarding headers and preserves its app Host.
+    // Direct local processes have the same trust as upstream's owner mode;
+    // a remote socket, arbitrary Host, or foreign browser origin does not.
+    const peer = req.socket?.remoteAddress;
+    const local = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+    const host = headerValue(req.headers.host)?.toLowerCase() ?? "";
+    const cubeHost = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-[a-z0-9]{8}(?:-stg)?\.cube\.site$/.test(host);
+    if (!local || (!cubeHost && !isLoopbackHost(host))) {
+      return deny(403, "forbidden: Cube's local app gateway is required");
+    }
+    if (!isSameOrigin(req) || headerValue(req.headers["sec-fetch-site"]) === "cross-site") {
+      return deny(403, "forbidden: cross-origin request");
+    }
+    return { auth: { kind: "loopback", scopes: LOOPBACK_SCOPES }, status: 401, error: "" };
+  }
 
   // A presented session credential wins over the loopback rule so the served
   // web UI behaves the same on 127.0.0.1 and on a public domain.

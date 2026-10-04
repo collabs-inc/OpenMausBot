@@ -31,6 +31,51 @@ function request(headers: Record<string, string>, method = "GET"): IncomingMessa
   return { headers, method } as unknown as IncomingMessage;
 }
 
+describe("Cube's authenticated gateway", () => {
+  let dir: string;
+  let sessions: SessionRegistry;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "omb-cube-auth-"));
+    sessions = new SessionRegistry({ file: join(dir, "sessions.json") });
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const check = (headers: Record<string, string> = {}, peer = "127.0.0.1", enabled = true) => {
+    const req = {
+      method: "POST",
+      headers: { host: "openmausbot-ab12cd34.cube.site", "x-forwarded-proto": "https", ...headers },
+      socket: { remoteAddress: peer, remoteFamily: "IPv4" },
+    } as unknown as IncomingMessage;
+    return resolveRequestAuth(req, {
+      sessions, cookieName: "fixture", streamPath: "/api/events",
+      url: new URL("https://openmausbot-ab12cd34.cube.site/api/bots"),
+      cubeGateway: enabled,
+    });
+  };
+
+  it("admits the Cube owner from hosted and desktop gateways without pairing", () => {
+    expect(check({ origin: "https://openmausbot-ab12cd34.cube.site" }).auth)
+      .toEqual({ kind: "loopback", scopes: ["admin", "client"] });
+    expect(check({ host: "127.0.0.1:45678", origin: "http://127.0.0.1:45678", "x-forwarded-proto": "http" }).auth?.kind).toBe("loopback");
+    expect(check().auth?.kind).toBe("loopback");
+  });
+
+  it("requires explicit opt-in and an actual loopback peer", () => {
+    expect(check({}, "127.0.0.1", false).auth).toBeNull();
+    expect(check({}, "203.0.113.20").auth).toBeNull();
+    expect(check({}, "").auth).toBeNull();
+  });
+
+  it("refuses foreign hosts, origins, and browser cross-site requests", () => {
+    for (const host of ["evil.example", "cube.site", "openmausbot-ab12cd34.cube.site.evil.example"]) {
+      expect(check({ host }).auth, host).toBeNull();
+    }
+    expect(check({ origin: "https://evil.example" }).auth).toBeNull();
+    expect(check({ origin: "null" }).auth).toBeNull();
+    expect(check({ "sec-fetch-site": "cross-site" }).auth).toBeNull();
+  });
+});
+
 describe("loopback rules (moved from the server entry, behaviour unchanged)", () => {
   it("accepts localhost, 127.x and ::1 with or without a port", () => {
     for (const host of ["localhost", "localhost:8799", "127.0.0.1", "127.9.9.9:80", "[::1]", "[::1]:8799", "LOCALHOST"]) {
